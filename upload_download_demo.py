@@ -4,9 +4,9 @@ from azure.core.exceptions import ResourceNotFoundError, ResourceExistsError
 sys.path.append("../")
 from appJar import gui
 from PIL import Image
+from pathlib import Path
 
 try:
-	print("Azure Blob storage v12 - Python quickstart sample")
 	connect_str = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
 except Exception as ex:
     print('Exception:')
@@ -77,8 +77,7 @@ def uploadbtn(btnName):
     filename = app.getEntry("image")
     # nhs_number = get_nhs_number from image
 
-    nhs_number = handler(filename)
-    nhs_number = nhs_number[7:]
+    nhs_number = handler(filename)[7:]
     print(nhs_number)
     blob_service_client = BlobServiceClient.from_connection_string(connect_str)
     container_name = nhs_number
@@ -93,14 +92,17 @@ def uploadbtn(btnName):
     blob_client = blob_service_client.get_blob_client(container=container_name, blob=record_name)
 
     with open(filename, "rb") as data:
-    	blob_client.upload_blob(data)
+    	try:
+    		blob_client.upload_blob(data)
+    	except ResourceExistsError:
+    		print("File already on system")
+    		return
 
     app.popUp("INFO", "You uploaded the file successfully")
 
 
 def retrievebtn(btnName):
     ################ insert button functionality here to DOWNLOAD FROM AZURE #################
-    app.popUp("INFO", "You uploaded the file successfully ")
     nhs_number = str(app.getEntry("NHSno"))
     blob_service_client = BlobServiceClient.from_connection_string(connect_str)
     try: 
@@ -110,20 +112,18 @@ def retrievebtn(btnName):
     	return
 
     record_list = container_client.list_blobs()
+    save_directory = nhs_number + "_medical_records"
+    if not os.path.exists(save_directory):
+    	os.makedirs(save_directory)
 
-    print(record_list)
     for record in record_list:
-    	try:
-    		img = Image.open(record.name)
-    	except IOError:
-    		print("didnt work")
-    		pass
+    	blob_client = blob_service_client.get_blob_client(container=nhs_number, blob=record.name)
+    	image = blob_client.download_blob()
+    	with open(os.path.join(save_directory, record.name), "wb") as test_file:
+    		test_file.write(image.readall())
 
+    app.popUp("INFO", "You retrieved all files")
 
-
-    
-
-    # uploaded
 
 with app.labelFrame("Upload Patient Data", colspan=2, sticky="news", expand="both"):
     app.addFileEntry("image") # file entry field
@@ -135,3 +135,9 @@ with app.labelFrame("Retrieve Patient Data", colspan=2, sticky="news", expand="b
     app.button("Retrieve", retrievebtn) # RETRIEVE button
 
 app.go() # starts the app interface
+
+
+
+
+
+
